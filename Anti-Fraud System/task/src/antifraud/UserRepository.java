@@ -29,4 +29,12 @@ public class UserRepository {
         return database.deleteUser(username);
     }
 
+    public User changeRole(String username, String role) throws SQLException, ClassNotFoundException {
+        return database.changeRole(username, role);
+    }
+
+    public boolean lockUser(String username, String action) throws SQLException, ClassNotFoundException {
+        return database.lockUser(username, action);
+    }
+
 }

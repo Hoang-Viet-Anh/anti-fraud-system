@@ -1,7 +1,9 @@
 package antifraud.usersDB;
 
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Component;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.sql.*;
 import java.util.ArrayList;
@@ -54,6 +56,8 @@ public class Database {
             user.setName(resultSet.getString("name"));
             user.setUsername(resultSet.getString("username"));
             user.setPassword(resultSet.getString("password"));
+            user.setRole(Role.valueOf(resultSet.getString("role")));
+            user.setLock(resultSet.getBoolean("isUnlocked"));
             closeConnection();
             preparedStatement.close();
             resultSet.close();
@@ -72,12 +76,15 @@ public class Database {
         preparedStatement.setString(1, user.getName());
         preparedStatement.setString(2, user.getUsername());
         preparedStatement.setString(3, user.getPassword());
+        preparedStatement.setString(4, hasUsers() ?
+                Role.MERCHANT.toString() : Role.ADMINISTRATOR.toString());
+        preparedStatement.setBoolean(5, !hasUsers());
         preparedStatement.executeUpdate();
         preparedStatement.close();
         closeConnection();
     }
 
-    synchronized public List<User> getUsers() throws SQLException, ClassNotFoundException {
+    public List<User> getUsers() throws SQLException, ClassNotFoundException {
         List<User> list = new ArrayList<>();
         connect();
         PreparedStatement preparedStatement = connection.prepareStatement(StatementsSQL.GET_TABLE);
@@ -87,6 +94,9 @@ public class Database {
             user.setId(resultSet.getLong("id"));
             user.setName(resultSet.getString("name"));
             user.setUsername(resultSet.getString("username"));
+            user.setPassword(resultSet.getString("password"));
+            user.setRole(Role.valueOf(resultSet.getString("role")));
+            user.setLock(resultSet.getBoolean("isUnlocked"));
             list.add(user);
         }
         preparedStatement.close();
@@ -105,6 +115,58 @@ public class Database {
             return true;
         } else {
             return false;
+        }
+    }
+
+    public boolean hasUsers() throws SQLException, ClassNotFoundException {
+        connect();
+        PreparedStatement preparedStatement = connection.prepareStatement(StatementsSQL.GET_TABLE);
+        ResultSet resultSet = preparedStatement.executeQuery();
+        boolean hasUsers = resultSet.next();
+        resultSet.close();
+        preparedStatement.close();
+        closeConnection();
+        return hasUsers;
+    }
+
+    public User changeRole(String username, String role) throws SQLException,
+            ClassNotFoundException, ResponseStatusException {
+        User user = find(username);
+        if (user == null) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND);
+        } else if (!role.equals(Role.SUPPORT.toString()) &&
+                    !role.equals(Role.MERCHANT.toString())) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST);
+        } else if (user.getRole().toString().equals(role)) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT);
+        } else {
+            connect();
+            PreparedStatement preparedStatement = connection.prepareStatement(StatementsSQL.CHANGE_ROLE);
+            preparedStatement.setString(1, role.toString());
+            preparedStatement.setString(2, username);
+            preparedStatement.executeUpdate();
+            preparedStatement.close();
+            closeConnection();
+            user = find(username);
+            return user;
+        }
+    }
+
+    public boolean lockUser(String username, String action) throws SQLException, ClassNotFoundException {
+        User user = find(username);
+        if (user == null) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND);
+        } else if (user.getRole().equals(Role.ADMINISTRATOR)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST);
+        } else {
+            connect();
+            PreparedStatement preparedStatement = connection.prepareStatement(StatementsSQL.CHANGE_LOCK);
+            preparedStatement.setBoolean(1, action.toUpperCase().equals("UNLOCK"));
+            preparedStatement.setString(2, username);
+            preparedStatement.executeUpdate();
+            preparedStatement.close();
+            closeConnection();
+            return true;
         }
     }
 

@@ -703,6 +703,438 @@ files:
         };
     }
   learner_created: false
+- name: src/antifraud/controllers/RegistrationController.java
+  visible: true
+  text: |
+    package antifraud.controllers;
+
+    import antifraud.UserRepository;
+    import antifraud.usersDB.User;
+    import org.springframework.beans.factory.annotation.Autowired;
+    import org.springframework.http.HttpStatus;
+    import org.springframework.http.ResponseEntity;
+    import org.springframework.security.crypto.password.PasswordEncoder;
+    import org.springframework.web.bind.annotation.PostMapping;
+    import org.springframework.web.bind.annotation.RequestBody;
+    import org.springframework.web.bind.annotation.RestController;
+
+    @RestController
+    public class RegistrationController {
+        @Autowired
+        UserRepository userRepo;
+        @Autowired
+        PasswordEncoder encoder;
+
+        @PostMapping("/api/auth/user")
+        public ResponseEntity<String> register(@RequestBody User user) {
+
+            try {
+                user.setPassword(encoder.encode(user.getPassword()));
+                if (userRepo.findUserByUsername(user.getUsername()) == null) {
+                    userRepo.save(user);
+                    User addedUser = userRepo.findUserByUsername(user.getUsername());
+                    return new ResponseEntity<>(addedUser.getJsonUser(), HttpStatus.CREATED);
+                }
+            } catch (Exception e) {
+                e.printStackTrace();
+                return new ResponseEntity<>(HttpStatus.BAD_REQUEST);
+            }
+            return new ResponseEntity<>(HttpStatus.CONFLICT);
+        }
+    }
+  learner_created: true
+- name: src/antifraud/usersDB/User.java
+  visible: true
+  text: |
+    package antifraud.usersDB;
+
+    import com.google.gson.Gson;
+    import com.google.gson.GsonBuilder;
+    import com.google.gson.JsonObject;
+    import com.google.gson.JsonParser;
+
+    public class User {
+        private long id;
+        private String name;
+        private String username;
+        private String password;
+
+        public User() {
+        }
+
+        public long getId() {
+            return id;
+        }
+
+        public void setId(long id) {
+            this.id = id;
+        }
+
+        public String getName() {
+            return name;
+        }
+
+        public void setName(String name) {
+            this.name = name;
+        }
+
+        public String getUsername() {
+            return username.toLowerCase();
+        }
+
+        public void setUsername(String username) {
+            this.username = username.toLowerCase();
+        }
+
+        public String getPassword() {
+            return password;
+        }
+
+        public void setPassword(String password) {
+            this.password = password;
+        }
+
+        public String getJsonUser() {
+            Gson gson = new GsonBuilder()
+                    .setPrettyPrinting()
+                    .create();
+            JsonObject object = new JsonObject();
+            object.addProperty("id", id);
+            object.addProperty("name", name);
+            object.addProperty("username", username);
+            return gson.toJson(object);
+        }
+
+        public static User parseJson(String json) {
+            JsonObject object = JsonParser.parseString(json).getAsJsonObject();
+            User user = new User();
+            user.setName(object.getAsJsonPrimitive("name").getAsString());
+            user.setUsername(object.getAsJsonPrimitive("username").getAsString());
+            user.setPassword(object.getAsJsonPrimitive("password").getAsString());
+            return user;
+        }
+
+    }
+  learner_created: true
+- name: src/antifraud/UserDetailsServiceImpl.java
+  visible: true
+  text: |
+    package antifraud;
+
+    import antifraud.usersDB.User;
+    import org.springframework.beans.factory.annotation.Autowired;
+    import org.springframework.security.core.userdetails.UserDetails;
+    import org.springframework.security.core.userdetails.UserDetailsService;
+    import org.springframework.security.core.userdetails.UsernameNotFoundException;
+    import org.springframework.stereotype.Service;
+
+    import java.sql.SQLException;
+
+    @Service
+    public class UserDetailsServiceImpl implements UserDetailsService {
+        @Autowired
+        UserRepository userRepo;
+
+        @Override
+        public UserDetails loadUserByUsername(String username) throws UsernameNotFoundException {
+            User user = null;
+            try {
+                user = userRepo.findUserByUsername(username);
+            } catch (SQLException | ClassNotFoundException e) {
+                e.printStackTrace();
+            }
+
+            if (user == null) {
+                throw new UsernameNotFoundException("Not found: " + username);
+            }
+
+            return new UserDetailsImpl(user);
+        }
+    }
+  learner_created: true
+- name: src/antifraud/UserRepository.java
+  visible: true
+  text: |
+    package antifraud;
+
+    import antifraud.usersDB.Database;
+    import antifraud.usersDB.User;
+    import org.springframework.beans.factory.annotation.Autowired;
+    import org.springframework.stereotype.Component;
+
+    import java.sql.SQLException;
+    import java.util.List;
+
+    @Component
+    public class UserRepository {
+        @Autowired
+        private Database database;
+
+        public User findUserByUsername(String username) throws SQLException, ClassNotFoundException {
+            return database.find(username);
+        }
+
+        public void save(User user) throws SQLException, ClassNotFoundException {
+            database.addUser(user);
+        }
+
+        public List<User> getUserList() throws SQLException, ClassNotFoundException {
+            return database.getUsers();
+        }
+
+        public boolean deleteUser(String username) throws SQLException, ClassNotFoundException {
+            return database.deleteUser(username);
+        }
+
+    }
+  learner_created: true
+- name: src/antifraud/controllers/TransactionController.java
+  visible: true
+  text: |
+    package antifraud.controllers;
+
+    import com.google.gson.*;
+    import org.springframework.http.HttpStatus;
+    import org.springframework.http.ResponseEntity;
+    import org.springframework.web.bind.annotation.*;
+
+    @RestController
+    public class TransactionController {
+
+        @PostMapping("/api/antifraud/transaction")
+        public ResponseEntity<String> isValid(@RequestBody String json) {
+            Gson gson = new GsonBuilder()
+                    .setPrettyPrinting()
+                    .create();
+            JsonObject jsonObject = JsonParser
+                    .parseString(json)
+                    .getAsJsonObject();
+            JsonObject object1 = new JsonObject();
+            String response = "";
+            long amount;
+
+            try {
+                amount = jsonObject.has("amount") ?
+                        jsonObject.getAsJsonPrimitive("amount")
+                                .getAsLong() : -1;
+            } catch (Exception exc) {
+                amount = -1;
+            }
+
+            if (amount > 0) {
+                if (amount <= 200) {
+                    response = "ALLOWED";
+                } else if (amount <= 1500) {
+                    response = "MANUAL_PROCESSING";
+                } else {
+                    response = "PROHIBITED";
+                }
+                object1.addProperty("result", response);
+            }
+
+
+            return object1.has("result") ?
+                    new ResponseEntity<>(gson.toJson(object1), HttpStatus.OK) :
+                    new ResponseEntity<>(HttpStatus.BAD_REQUEST);
+        }
+
+    }
+  learner_created: true
+- name: src/antifraud/controllers/UserDataController.java
+  visible: true
+  text: |
+    package antifraud.controllers;
+
+    import antifraud.UserRepository;
+    import antifraud.usersDB.User;
+    import com.google.gson.*;
+    import org.springframework.beans.factory.annotation.Autowired;
+    import org.springframework.http.HttpStatus;
+    import org.springframework.http.ResponseEntity;
+    import org.springframework.web.bind.annotation.DeleteMapping;
+    import org.springframework.web.bind.annotation.GetMapping;
+    import org.springframework.web.bind.annotation.PathVariable;
+    import org.springframework.web.bind.annotation.RestController;
+
+    import java.sql.SQLException;
+    import java.util.List;
+
+    @RestController
+    public class UserDataController {
+        @Autowired
+        UserRepository userRepo;
+
+        @GetMapping("/api/auth/list")
+        public ResponseEntity<String> getUsersData() {
+            Gson gson = new GsonBuilder()
+                    .setPrettyPrinting()
+                    .create();
+            JsonArray array = new JsonArray();
+            try {
+                List<User> list = userRepo.getUserList();
+                list.forEach(a -> {
+                    array.add(JsonParser.parseString(a.getJsonUser()));
+                });
+            } catch (SQLException | ClassNotFoundException e) {
+                e.printStackTrace();
+            }
+            return new ResponseEntity<>(gson.toJson(array), HttpStatus.OK);
+        }
+
+        @DeleteMapping("/api/auth/user/{username}")
+        public ResponseEntity<String> deteleUser(@PathVariable String username) {
+            try {
+                if (userRepo.deleteUser(username)) {
+                    Gson gson = new GsonBuilder()
+                            .setPrettyPrinting()
+                            .create();
+                    JsonObject object = new JsonObject();
+                    object.addProperty("username", username);
+                    object.addProperty("status", "Deleted successfully!");
+                    return new ResponseEntity<>(gson.toJson(object), HttpStatus.OK);
+                }
+            } catch (SQLException | ClassNotFoundException e) {
+                e.printStackTrace();
+            }
+            return new ResponseEntity<>(HttpStatus.NOT_FOUND);
+        }
+    }
+  learner_created: true
+- name: src/antifraud/UserDetailsImpl.java
+  visible: true
+  text: |
+    package antifraud;
+
+    import antifraud.usersDB.User;
+    import org.springframework.security.core.GrantedAuthority;
+    import org.springframework.security.core.userdetails.UserDetails;
+
+    import java.util.Collection;
+
+    public class UserDetailsImpl implements UserDetails {
+        private final String username;
+        private final String password;
+
+        public UserDetailsImpl(User user) {
+            username = user.getUsername();
+            password = user.getPassword();
+        }
+
+        @Override
+        public Collection<? extends GrantedAuthority> getAuthorities() {
+            return null;
+        }
+
+        @Override
+        public String getPassword() {
+            return password;
+        }
+
+        @Override
+        public String getUsername() {
+            return username;
+        }
+
+        // 4 remaining methods that just return true
+        @Override
+        public boolean isAccountNonExpired() {
+            return true;
+        }
+
+        @Override
+        public boolean isAccountNonLocked() {
+            return true;
+        }
+
+        @Override
+        public boolean isCredentialsNonExpired() {
+            return true;
+        }
+
+        @Override
+        public boolean isEnabled() {
+            return true;
+        }
+    }
+  learner_created: true
+- name: src/antifraud/WebSecurityConfigurerImpl.java
+  visible: true
+  text: |
+    package antifraud;
+
+    import org.springframework.beans.factory.annotation.Autowired;
+    import org.springframework.context.annotation.Bean;
+    import org.springframework.http.HttpMethod;
+    import org.springframework.security.config.annotation.authentication.builders.AuthenticationManagerBuilder;
+    import org.springframework.security.config.annotation.web.builders.HttpSecurity;
+    import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
+    import org.springframework.security.config.annotation.web.configuration.WebSecurityConfigurerAdapter;
+    import org.springframework.security.config.http.SessionCreationPolicy;
+    import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
+    import org.springframework.security.crypto.password.PasswordEncoder;
+
+    @EnableWebSecurity
+    public class WebSecurityConfigurerImpl extends WebSecurityConfigurerAdapter {
+        @Autowired
+        private UserDetailsServiceImpl userDetailedService;
+
+        @Override
+        protected void configure(AuthenticationManagerBuilder auth) throws Exception {
+            auth
+                    .userDetailsService(userDetailedService)
+                    .passwordEncoder(getEncoder());
+        }
+
+        @Override
+        public void configure(HttpSecurity http) throws Exception {
+            http.httpBasic()
+                    .authenticationEntryPoint(new RestAuthenticationEntryPoint()) // Handles auth error
+                    .and()
+                    .csrf().disable().headers().frameOptions().disable() // for Postman, the H2 console
+                    .and()
+                    .authorizeRequests() // manage access
+                    .mvcMatchers(HttpMethod.POST, "/api/auth/user").permitAll()
+                    .mvcMatchers("/actuator/shutdown").permitAll()
+                    .mvcMatchers("/**").authenticated()
+                    .and()
+                    .sessionManagement()
+                    .sessionCreationPolicy(SessionCreationPolicy.STATELESS); // no session
+        }
+
+
+        @Bean
+        public PasswordEncoder getEncoder() {
+            return new BCryptPasswordEncoder();
+        }
+    }
+  learner_created: true
+- name: src/antifraud/RestAuthenticationEntryPoint.java
+  visible: true
+  text: |
+    package antifraud;
+
+    import org.springframework.security.core.AuthenticationException;
+    import org.springframework.security.web.AuthenticationEntryPoint;
+
+    import javax.servlet.ServletException;
+    import javax.servlet.http.HttpServletRequest;
+    import javax.servlet.http.HttpServletResponse;
+    import java.io.IOException;
+
+    public class RestAuthenticationEntryPoint implements AuthenticationEntryPoint {
+
+        @Override
+        public void commence(HttpServletRequest request, HttpServletResponse response, AuthenticationException authException) throws IOException, ServletException {
+            response.sendError(HttpServletResponse.SC_UNAUTHORIZED, authException.getMessage());
+        }
+    }
+  learner_created: true
+- name: src/antifraud/usersDB/Role.java
+  visible: true
+  learner_created: true
 feedback_link: https://hyperskill.org/learn/step/18069#comment
-status: Unchecked
+status: Solved
+feedback:
+  message: Congratulations!
+  time: Wed, 13 Apr 2022 16:13:23 UTC
 record: -1

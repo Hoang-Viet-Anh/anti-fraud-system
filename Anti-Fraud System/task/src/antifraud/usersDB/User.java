@@ -10,6 +10,8 @@ public class User {
     private String name;
     private String username;
     private String password;
+    private Role role;
+    private boolean lock = false;
 
     public User() {
     }
@@ -46,6 +48,23 @@ public class User {
         this.password = password;
     }
 
+    public Role getRole() {
+        return role;
+    }
+
+    public void setRole(Role role) {
+        this.role = role;
+        lock = role.equals(Role.ADMINISTRATOR);
+    }
+
+    public boolean isLock() {
+        return lock;
+    }
+
+    public void setLock(boolean lock) {
+        this.lock = lock;
+    }
+
     public String getJsonUser() {
         Gson gson = new GsonBuilder()
                 .setPrettyPrinting()
@@ -54,6 +73,7 @@ public class User {
         object.addProperty("id", id);
         object.addProperty("name", name);
         object.addProperty("username", username);
+        object.addProperty("role", role.toString());
         return gson.toJson(object);
     }
 
@@ -63,6 +83,7 @@ public class User {
         user.setName(object.getAsJsonPrimitive("name").getAsString());
         user.setUsername(object.getAsJsonPrimitive("username").getAsString());
         user.setPassword(object.getAsJsonPrimitive("password").getAsString());
+
         return user;
     }
 
