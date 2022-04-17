@@ -1,7 +1,8 @@
 package antifraud.controllers;
 
-import antifraud.UserRepository;
-import antifraud.usersDB.User;
+import antifraud.database.user.UserRepository;
+import antifraud.database.user.Role;
+import antifraud.database.user.User;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -20,13 +21,18 @@ public class RegistrationController {
 
         try {
             user.setPassword(encoder.encode(user.getPassword()));
-            if (userRepo.findUserByUsername(user.getUsername()) == null) {
-                userRepo.save(user);
-                User addedUser = userRepo.findUserByUsername(user.getUsername());
+            if (!userRepo.existsByUsername(user.getUsername())) {
+                if (userRepo.count() == 0) {
+                    user.setLock(true);
+                    user.setRole(Role.ADMINISTRATOR);
+                } else {
+                    user.setRole(Role.MERCHANT);
+                    user.setLock(false);
+                }
+                User addedUser = userRepo.save(user);
                 return new ResponseEntity<>(addedUser.getJsonUser(), HttpStatus.CREATED);
             }
         } catch (Exception e) {
-            e.printStackTrace();
             return new ResponseEntity<>(HttpStatus.BAD_REQUEST);
         }
         return new ResponseEntity<>(HttpStatus.CONFLICT);
