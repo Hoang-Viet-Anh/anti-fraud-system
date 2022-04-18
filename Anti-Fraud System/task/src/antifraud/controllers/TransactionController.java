@@ -2,12 +2,11 @@ package antifraud.controllers;
 
 import antifraud.database.ip.IpRepository;
 import antifraud.database.stolenCard.StolenCardRepository;
+import antifraud.database.transaction.Feedback;
 import antifraud.database.transaction.TransactionData;
 import antifraud.database.transaction.TransactionRepository;
 import antifraud.database.transaction.TransactionResult;
-import com.google.gson.Gson;
-import com.google.gson.GsonBuilder;
-import com.google.gson.JsonObject;
+import com.google.gson.*;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -34,7 +33,7 @@ public class TransactionController {
             .create();
 
     @PostMapping("/api/antifraud/transaction")
-    public ResponseEntity<String> isValid(@Valid @RequestBody TransactionData transaction) {
+    ResponseEntity<String> isValid(@Valid @RequestBody TransactionData transaction) {
         if (!transaction.ipIsValid()) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "IP address has the wrong format.");
         } else if (!transaction.numberIsValid()) {
@@ -98,6 +97,8 @@ public class TransactionController {
         while (iterator.hasNext()) {
             info = info.concat(", " + iterator.next());
         }
+        transaction.setResult(TransactionResult.valueOf(result));
+        transactionRepo.save(transaction);
 
         JsonObject jsonObject = new JsonObject();
         jsonObject.addProperty("result", result);
@@ -106,4 +107,76 @@ public class TransactionController {
         return new ResponseEntity<>(gson.toJson(jsonObject), HttpStatus.OK);
     }
 
+    @PutMapping("/api/antifraud/transaction")
+    ResponseEntity<String> addFeedback(@Valid @RequestBody Feedback feedback) {
+        TransactionData transaction = transactionRepo.findById(feedback.getTransactionId()).get(0);
+        if (!transactionRepo.existsById(feedback.getTransactionId())) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Transaction is not found in history.");
+        } else if (transactionRepo.existsByIdAndFeedbackIsNotNull(feedback.getTransactionId())) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                    "The feedback for this transaction is already in the database.");
+        } else if (transaction.getResult().equals(feedback.getFeedback())) {
+            throw new ResponseStatusException(HttpStatus.UNPROCESSABLE_ENTITY);
+        } else {
+            transaction.setFeedback(feedback.getFeedback());
+            transaction.setDate(transaction.getDateData().toString());
+            transaction = transactionRepo.save(transaction);
+            TransactionResult feedbackResult = feedback.getFeedback();
+            TransactionResult validatyResult = transaction.getResult();
+            if (feedbackResult.equals(TransactionResult.ALLOWED)) {
+                if (validatyResult.equals(TransactionResult.MANUAL_PROCESSING)) {
+                    TransactionData.increaseAllowLimit(transaction.getAmount());
+                } else if (validatyResult.equals(TransactionResult.PROHIBITED)) {
+                    TransactionData.increaseAllowLimit(transaction.getAmount());
+                    TransactionData.increaseProhibitedLimit(transaction.getAmount());
+                }
+            } else if (feedbackResult.equals(TransactionResult.MANUAL_PROCESSING)) {
+                if (validatyResult.equals(TransactionResult.ALLOWED)) {
+                    TransactionData.decreaseAllowLimit(transaction.getAmount());
+                } else if (validatyResult.equals(TransactionResult.PROHIBITED)) {
+                    TransactionData.increaseProhibitedLimit(transaction.getAmount());
+                }
+            } else if (feedbackResult.equals(TransactionResult.PROHIBITED)) {
+                if (validatyResult.equals(TransactionResult.ALLOWED)) {
+                    TransactionData.decreaseAllowLimit(transaction.getAmount());
+                    TransactionData.decreaseProhibitedLimit(transaction.getAmount());
+                } else if (validatyResult.equals(TransactionResult.MANUAL_PROCESSING)) {
+                    TransactionData.decreaseProhibitedLimit(transaction.getAmount());
+                }
+            }
+
+            return new ResponseEntity<>(gson.toJson(transaction.toJson()), HttpStatus.OK);
+        }
+    }
+
+    @GetMapping("/api/antifraud/history")
+    ResponseEntity<String> getHistory() {
+        JsonArray array = new JsonArray();
+        List<TransactionData> list = new ArrayList<>();
+        transactionRepo.findAll().forEach(list::add);
+        list.forEach(a -> {
+            array.add(a.toJson());
+        });
+        return new ResponseEntity<>(gson.toJson(array), HttpStatus.OK);
+    }
+
+    @GetMapping("/api/antifraud/history/{number}")
+    ResponseEntity<String> getNumberHistory(@PathVariable String number) {
+        TransactionData data = new TransactionData();
+        data.setNumber(number);
+        if (!data.numberIsValid()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "Card number doesn't follow the right format");
+        } else if (!transactionRepo.existsByNumber(number)) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND,
+                    "Transaction for a specified card number are not found.");
+        }
+
+        JsonArray array = new JsonArray();
+        List<TransactionData> list = new ArrayList<>(transactionRepo.findByNumber(number));
+        list.forEach(a -> {
+            array.add(a.toJson());
+        });
+        return new ResponseEntity<>(gson.toJson(array), HttpStatus.OK);
+    }
 }

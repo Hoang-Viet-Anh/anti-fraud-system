@@ -1,9 +1,40 @@
 # Anti-Fraud System
 JetBrains Academy. Project: Anti-Fraud System.</br></br>
 
-In the fourth stage enabled our anti-fraud system to retrieve a list of</br>
-prohibited card numbers and suspicious IP addresses to ban them</br>
-from carrying out any transactions.
+In the final adapted mechanism feedback to service. Feedback will be carried out</br>
+manually by a SUPPORT specialist for completed transactions. Based on the feedback</br>
+results, we will change the limits of fraud detection algorithms following the special rules.
+
+<table>
+    <tr>
+        <th>Transaction Feedback →</br>
+        Transaction Validity ↓</th>
+        <th>ALLOWED</th>
+        <th>MANUAL_PROCESSING</th>
+        <th>PROHIBITED</th>
+    </tr>
+    <tr>
+        <td>ALLOWED</td>
+        <td>Exception</td>
+        <td>↓ max ALLOWED</td>
+        <td>↓ max ALLOWED
+            </br>↓ max MANUAL</td>
+    </tr>
+    <tr>
+        <th>MANUAL_PROCESSING</th>
+        <td>↑ max ALLOWED</td>
+        <td>Exception</td>
+        <td>↓ max MANUAL</td>
+    </tr>
+    <tr>
+        <th>PROHIBITED</th>
+        <td>↑ max ALLOWED</br>
+            ↑ max MANUAL</td>
+        <td>↑ max MANUAL</td>
+        <td>Exception</td>
+    </tr>
+    </tbody>
+</table>
 
 Implemented the role model for system:</br>
 <table>
@@ -61,14 +92,28 @@ Implemented the role model for system:</br>
     <td>-</td>
     <td>-</td>
     <td>-</td>
-    <td>-</td>
+    <td>+</td>
 </tr>
 <tr>
     <td>POST, DELETE, GET api/antifraud/stolencard</td>
     <td>-</td>
     <td>-</td>
     <td>-</td>
+    <td>+</td>
+</tr>
+<tr>
+    <td>GET /api/antifraud/history</td>
     <td>-</td>
+    <td>-</td>
+    <td>-</td>
+    <td>+</td>
+</tr>
+<tr>
+    <td>PUT /api/antifraud/transaction</td>
+    <td>-</td>
+    <td>-</td>
+    <td>-</td>
+    <td>+</td>
 </tr>
 </table>
 

@@ -48,10 +48,19 @@ public class WebSecurityConfigurerImpl extends WebSecurityConfigurerAdapter {
                 .mvcMatchers("api/antifraud/stolencard/**")
                     .hasRole(Role.SUPPORT.toString())
 
+                .mvcMatchers(HttpMethod.PUT, "/api/antifraud/transaction")
+                    .hasRole(Role.SUPPORT.toString())
+
+                .mvcMatchers(HttpMethod.GET, "/api/antifraud/history")
+                .hasRole(Role.SUPPORT.toString())
+
+                .mvcMatchers(HttpMethod.GET, "/api/antifraud/history/**")
+                .hasRole(Role.SUPPORT.toString())
+
                 .mvcMatchers(HttpMethod.POST, "/api/auth/user").permitAll()
                 .mvcMatchers( "/actuator/shutdown").permitAll()
                 .mvcMatchers("/h2").permitAll()
-                //.anyRequest().authenticated()
+                .anyRequest().authenticated()
                 .and()
                 .httpBasic()
                 .authenticationEntryPoint(new RestAuthenticationEntryPoint()) // Handles auth error
