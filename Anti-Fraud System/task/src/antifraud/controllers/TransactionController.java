@@ -3,6 +3,7 @@ package antifraud.controllers;
 import antifraud.database.ip.IpRepository;
 import antifraud.database.stolenCard.StolenCardRepository;
 import antifraud.database.transaction.TransactionData;
+import antifraud.database.transaction.TransactionRepository;
 import antifraud.database.transaction.TransactionResult;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
@@ -14,6 +15,7 @@ import org.springframework.web.bind.annotation.*;
 import org.springframework.web.server.ResponseStatusException;
 
 import javax.validation.Valid;
+import java.sql.Timestamp;
 import java.util.*;
 
 @RestController
@@ -23,6 +25,9 @@ public class TransactionController {
 
     @Autowired
     private StolenCardRepository cardRepo;
+
+    @Autowired
+    private TransactionRepository transactionRepo;
 
     private final Gson gson = new GsonBuilder()
             .setPrettyPrinting()
@@ -37,17 +42,42 @@ public class TransactionController {
         } else if (!transaction.amountIsValid()) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Amount has the wrong value.");
         }
+        try {
+            if (!transaction.dateIsValid()) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST);
+            }
+            transactionRepo.save(transaction);
+        } catch (Exception e) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST);
+        }
+
+        Timestamp from = new Timestamp(transaction.getDateData().getTime() - 3600000);
+        Timestamp to = new Timestamp(transaction.getDateData().getTime());
+
+        List<TransactionData> listData = transactionRepo.findByNumberAndDateDataBetween(transaction.getNumber(), from, to);
 
         TransactionResult amountResult = transaction.amountResult();
         TransactionResult cardResult = !cardRepo.existsByNumber(transaction.getNumber()) ?
                 TransactionResult.ALLOWED : TransactionResult.PROHIBITED;
         TransactionResult ipResult = !ipRepo.existsByIp(transaction.getIp()) ?
                 TransactionResult.ALLOWED : TransactionResult.PROHIBITED;
+        Set<String> correlation = new HashSet<>();
+        listData.forEach(a -> correlation.add(a.getIp()));
+        TransactionResult ipCorrelation = correlation.size() < 3 ?
+                TransactionResult.ALLOWED : correlation.size() == 3 ?
+                TransactionResult.MANUAL_PROCESSING : TransactionResult.PROHIBITED;
+        correlation.clear();
+        listData.forEach(a -> correlation.add(a.getRegion().toString()));
+        TransactionResult regCorrelation = correlation.size() < 3 ?
+                TransactionResult.ALLOWED : correlation.size() == 3 ?
+                TransactionResult.MANUAL_PROCESSING : TransactionResult.PROHIBITED;
 
         Map<String, TransactionResult> resultList = new LinkedHashMap<>();
         resultList.put("amount", amountResult);
         resultList.put("card-number", cardResult);
         resultList.put("ip", ipResult);
+        resultList.put("ip-correlation", ipCorrelation);
+        resultList.put("region-correlation", regCorrelation);
         List<String> infoList = new ArrayList<>();
         infoList.add("none");
         String result = TransactionResult.ALLOWED.toString();
